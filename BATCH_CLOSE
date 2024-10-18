@@ -1,0 +1,72 @@
+ SELECT C.MSG_ID,
+
+       CQ.STATUS,
+
+       C.EVENT_ID,
+
+       C.WHEN_CREATED,
+
+       C.DATA,
+
+       CQ.WHEN_QUEUED,
+
+       CQ.WHEN_STATUS_CHANGED
+
+FROM WM.CL_MESSAGE C,
+
+     WM.CL_ENDPOINT_QUEUE CQ
+
+WHERE C.MSG_ID = CQ.MSG_ID
+
+  AND TRUNC(CQ.WHEN_QUEUED) >= TRUNC(SYSDATE)
+
+  AND C.DATA LIKE '%EP0741%'
+  --AND C.EVENT_ID IN ('9991')
+  
+
+ORDER BY C.WHEN_CREATED DESC ;
+
+
+
+
+
+
+
+
+
+
+select a.msg_id, a.event_id, a.source_id, b.status, c.status_name, a.when_created, a.data
+
+from wm.cl_message a join wm.cl_endpoint_queue b on a.msg_id = b.msg_id
+
+join wm.cl_message_status c on b.status = c.status_id
+
+--and a.event_id = '6690'
+
+and a.data LIKE '%EP0741%'
+AND A.EVENT_ID IN ('9991')
+
+order by a.when_created desc;
+
+
+select * from wm.cl_messag where data like '%CONTAINERSTATUS%' order by when_created desc;
+
+
+
+
+
+select cm.event_id,ce.endpoint_id,cm.msg_id,ceq.error_count,ce.name,cm.when_created,ceq.when_status_changed,ceq.status,cm.data
+--from cl_message cm, cl_endpoint_queue ceq, cl_endpoint ce
+from WM.cl_message cm, WM.cl_endpoint_queue ceq, WM.cl_endpoint ce
+where cm.msg_id=ceq.msg_id and ceq.endpoint_id = ce.endpoint_id
+--and --ce.name in ('')
+--and status=2
+and when_status_changed between to_Date('23-12-28 00:00:00','yy-mm-dd hh24:mi:ss') and sysdate
+--and to_Date('21-09-20 15:15:00','yy-mm-dd hh24:mi:ss')
+--and ceq.msg_id in ('PW6677')
+and cm.data like '%PW5143%'
+--and event_id = '9991' 
+---and ce.endpoint_id = '363'
+order by ceq.WHEN_STATUS_CHANGED desc;---- check item status messages for the mentioned olpn
+
+
