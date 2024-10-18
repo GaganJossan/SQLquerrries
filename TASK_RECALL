@@ -1,0 +1,108 @@
+select * from wm.task_hdr where TASK_ID = '19996143';
+select * from wm.task_dtl where task_id = '19779416';
+
+select * from wm.task_dtl where TOTE_NBR ='TT1405' and stat_code<90;---CNTR_NBR ='1201370032';
+
+select* from wm.SYS_CODE
+select* from wm.task_dtl where pull_locn_id='0797576' and stat_code<90; 
+--and DEST_LOCN_ID = '614264'--AND stat_code<90;
+
+select* from wm.locn_hdr where DSP_LOCN = 'MA3-08-05-B01';
+
+SELECT* from wm.lpn_lock where tc_lpn_id='2205798256';
+
+select* from WM.pick_locn_dtl where locn_id ='0871127';
+select * from locn_hdr where dsp_locn like 'MH1%';
+
+select* from wm.SHIP_VIA
+
+select * from wm.c_enroute_tran where  STAT_CODE< 90 and tc_lpn_id = '00000999990762626615' order by created_dttm desc;  
+
+select * from WM.c_item_trade_rate where item_name='144361604';
+
+select* from wm.pick_locn_dtl pld join wm.locn_hdr lh on lh.locn_id = pld.locn_id where lh.dsp_locn = ' CR103-13-A01';
+
+select*from WM.ALLOC_INVN_DTL where pull_locn_id='0894755' and stat_code<90;-----TASK_CMPL_REF_NBR='00000999990639243563'----alloc_invn_dtl_id='326674432'-- CNTR_NBR='1201370032'--order by CREATE_DATE_TIME;--and stat_code<90; pull_locn_id= '0619090'and item_id='1320550';
+
+select*from wm.wm_inventory ---where LOCATION_ID='0831646'
+where tc_lpn_id='00006285770161169823';
+
+select* from wm.wm_inventory where TC_LPN_ID='00000999990643336916'
+
+select* from wm.ORDers where TC_ORDER_ID= 'c57248421388_202401141433166072719475'
+
+select* from wm.lpn_facility_status;
+
+select* from wm.DO_STATUS;
+
+select* from wm.ILM_TASK_HISTORY;
+
+select* from wm.task_dtl where TASK_GENRTN_REF_NBR='202402020064' and Misc_alpha_field_2 is null;
+
+Select * from wm.lpn where tc_shipment_id ='LL1269539' and lpn_facility_status<90;
+
+select* from wm.item_cbo where ITEM_NAME= '120925044';
+
+select*from wm.wm_inventory;
+
+select* from wm.task_dtl where stat_code<90;
+
+SELECT DISTINCT wm.task_dtl.TASK_ID
+    ---wm.locn_hdr.LOCN_ID, 
+    ---wm.locn_hdr.DSP_LOCN, 
+   --- wm.task_dtl.ALLOC_INVN_DTL_ID
+FROM 
+    wm.locn_hdr
+INNER JOIN 
+    wm.task_dtl ON wm.locn_hdr.LOCN_ID = wm.task_dtl.PULL_LOCN_ID
+WHERE 1=1
+    and wm.locn_hdr.DSP_LOCN = 'MA4-12-15-A03'   And stat_code<90;
+    
+    select * from wm.locn_hdr where DSP_LOCN = 'MA4-11-36-D05';
+    select distinct task_id from wm.task_dtl where stat_code < 90 and  pull_locn_id='0894755' and item_id in (select item_id from wm.item_cbo where item_name='114801184');
+    
+
+select* from wm.ORDER_LINE_ITEM
+select* from wm.ORDER_STATUS
+select* from wm.orders where TC_ORDER_ID = 'c51005242164_202401242038376383470030'
+select* from wm.wm_inventory where item_id = '39386252'
+select* from wm.alloc_invn_dtl where CARTON_NBR='00006285770214087890'--- tc_order_id='c51005242164_202401242038376383470030'
+select* from wm.item_cbo where item_id='1319519';
+
+select* from wm.msg_log where ref_value_1='202402130422';
+select * from wm.lpn_detail where lpn_id in (select lpn_id from wm.lpn where tc_lpn_id in ('00000999990645057956'));
+
+select * from wm.lpn where tc_lpn_id in '00000999990644875445';
+
+select * from wm.c_coo_mid_xref where item_name in('148925269','','',);
+
+select* from wm.order_line_item where last_updated _DTTM 24-01-02 06:24:10.000000000 order_id in (select order_id from wm.orders where tc_order_id in ('c58003133688_202401300912286518523438'));
+
+select* from wm.wm_inventory;
+
+select* from wm.orders where tc_order_id=('463102534','463109178','463102544','463104984','463105119','463105732','463106748','463108804','463108923','463102543','463102526','463102530','463102532','463102533','463103074','463103078','463103085','463103091','463104966','463104970','463104973','463104976','463104978','463104979','463104982','463105109','463105115','463105120','463105123','463105124','463105128','463105130','463105224','463105228','463105232','463105235','463105237','463105240','463105241','463105720','463105724','463105727','463105733','463105734','463105878','463105885','463105891','463108554','463108565','463108571','463108624','463108628','463108635','463108641','463105729','463105874','463105242','463105716','463105125','463105129','463102536','463102537','463102538','463103080','463103081','463104977','463104983');
+
+    SELECT * 
+FROM wm.orders 
+WHERE tc_order_id IN ('463102534','463109178','463102544','463104984','463105119','463105732','463106748','463108804','463108923','463102543','463102526','463102530','463102532','463102533','463103074','463103078','463103085','463103091','463104966','463104970','463104973','463104976','463104978','463104979','463104982','463105109','463105115','463105120','463105123','463105124','463105128','463105130','463105224','463105228','463105232','463105235','463105237','463105240','463105241','463105720','463105724','463105727','463105733','463105734','463105878','463105885','463105891','463108554','463108565','463108571','463108624','463108628','463108635','463108641','463105729','463105874','463105242','463105716','463105125','463105129','463102536','463102537','463102538','463103080','463103081','463104977','463104983');
+
+ 
+    SELECT* FROM WM.Ucl_user     where USER_NAME = 'GASINGH'
+
+
+select* from wm.COMPANY
+
+update WM.LRF_user_pro set PRTR_REQSTR ='FRCH402'
+
+where user_pro_id ='24359' and user_id ='MMALINAT';
+
+commit;
+
+
+Select * from wm.Prod_trkg_tran where tc_order_id = 'c171658851736681_202405241615569072380165'
+
+SELECT* FROM WM.TASK_DTL WHERE CNTR_NBR = 'BLM00000000008273802';
+
+
+
+
