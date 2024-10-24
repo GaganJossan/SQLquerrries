@@ -1,0 +1,31 @@
+WITH base_query AS (
+    SELECT *
+    FROM WM.EVENT_MESSAGE
+    WHERE WM.EVENT_MESSAGE.EK_TASK_ID IS NOT NULL
+),
+ranked_results AS (
+    SELECT DISTINCT
+        wm.task_dtl.TASK_GENRTN_REF_NBR AS WAVE_NBR,
+        WM.WAVE_PARM.WAVE_DESC,
+        base_query.EK_ILPN_NBR AS TOTE,
+        base_query.EK_TASK_ID AS TASK_ID,
+        TO_CHAR(base_query.CREATE_DATE_TIME + INTERVAL '3' HOUR, 'DD-Mon-YYYY HH:MI:SS AM') AS INDUCTION_TIME, -- Adjusting the time and formatting
+        base_query.USER_ID,
+        ROW_NUMBER() OVER (PARTITION BY base_query.EK_TASK_ID ORDER BY base_query.CREATE_DATE_TIME DESC) AS rn,
+        CASE 
+            WHEN WM.WAVE_PARM.WAVE_DESC LIKE 'MIL E%' THEN 'MILTON'
+            WHEN WM.WAVE_PARM.WAVE_DESC LIKE 'PP%' THEN 'MIL AND MISS'
+            ELSE 'MISS'
+        END AS FACILITY
+    FROM base_query
+    LEFT JOIN WM.CL_EVENT_MASTER 
+        ON base_query.EVENT_ID = WM.CL_EVENT_MASTER.EVENT_ID
+    JOIN WM.TASK_DTL 
+        ON base_query.EK_TASK_ID = WM.TASK_DTL.task_id
+    JOIN WM.WAVE_PARM
+        ON WM.WAVE_PARM.WAVE_NBR = wm.task_dtl.TASK_GENRTN_REF_NBR
+)
+SELECT WAVE_NBR, WAVE_DESC, TOTE, TASK_ID, INDUCTION_TIME, USER_ID, FACILITY
+FROM ranked_results
+WHERE rn = 1
+ORDER BY TO_DATE(INDUCTION_TIME, 'DD-Mon-YYYY HH:MI:SS AM') DESC;
