@@ -1,0 +1,58 @@
+WITH alloc_invn_dtl_ranked AS (
+  SELECT 
+    ai.item_id, 
+    ai.mod_date_time,
+    ROW_NUMBER() OVER (PARTITION BY ai.item_id ORDER BY ai.mod_date_time DESC) AS rn
+  FROM wm.alloc_invn_dtl ai
+)
+SELECT  
+  lh.DSP_LOCN,
+  ic.item_name, 
+  ic.description, 
+  wi.on_hand_qty, 
+  wi.wm_allocated_qty, 
+  wi.to_be_filled_qty, 
+  TO_CHAR(MAX(ptt.begin_date), 'DD-MON-YY') AS Locn_Last_allocated, 
+  lh.area || lh.zone AS area_zone, 
+  DECODE(wi.inventory_type, wi.inventory_type, 
+    (SELECT code_desc FROM sys_code 
+     WHERE rec_type = 'B' 
+     AND code_type = '064' 
+     AND code_id = wi.inventory_type)) AS "Inventory Type", 
+  CASE 
+    WHEN wi.inventory_type = 'R' THEN '10096'
+    WHEN wi.inventory_type = 'E' THEN '10056'
+    WHEN wi.inventory_type = 'S' THEN '10046'
+    WHEN wi.inventory_type = 'B' THEN '10066'
+    WHEN wi.inventory_type = 'C' THEN '10078'
+    WHEN wi.inventory_type = 'I' THEN '10077'
+    WHEN wi.inventory_type = 'V' THEN '10097'
+    WHEN wi.inventory_type = 'K' THEN '10087'
+    WHEN wi.inventory_type = 'P' THEN '10079'
+    ELSE 'err' 
+  END AS "MMS DC Nbr",
+  TO_CHAR(ai.mod_date_time, 'DD-Mon-YYYY HH24:MI:SS') AS Sku_last_allocated,
+  ROUND(TRUNC(SYSDATE) - TRUNC(ai.mod_date_time), 0) AS Age -- Calculate age in days
+FROM 
+  locn_hdr lh
+  JOIN wm_inventory wi ON wi.location_id = lh.locn_id
+  JOIN item_cbo ic ON wi.item_id = ic.item_id
+  JOIN prod_trkg_tran ptt ON ptt.from_locn = wi.location_id AND ptt.tran_type = '500'
+  LEFT JOIN alloc_invn_dtl_ranked ai ON ai.item_id = ic.item_id AND ai.rn = 1 
+WHERE 
+  lh.area || lh.zone in ('AS1')
+  AND ptt.tran_type = '500' 
+GROUP BY 
+  lh.DSP_LOCN,
+  ic.item_name, 
+  ic.description, 
+  wi.on_hand_qty, 
+  wi.wm_allocated_qty, 
+  wi.to_be_filled_qty, 
+  lh.area || lh.zone, 
+  wi.inventory_type,
+  ai.mod_date_time
+HAVING 
+  MAX(ptt.begin_date) < SYSDATE - 30
+  AND ai.mod_date_time < SYSDATE - 30;
+alter session set current_schema=wm;
