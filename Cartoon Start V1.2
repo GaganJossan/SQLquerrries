@@ -1,0 +1,174 @@
+select
+    user_assigned
+    , wave_nbr
+    , wave_type_desc
+    , wave_desc
+    --, container_type
+    --, container_size
+    , to_char(max_stat_code,'00')
+    ||' - '||
+    CASE 
+         WHEN max_stat_code in ('5','05') THEN 'Pending_FA'
+        WHEN max_stat_code in ('06','6') THEN 'Investigate_before_inducting'
+        WHEN max_stat_code = '10' THEN 'Ready_to_Induct'
+        WHEN max_stat_code = '20' THEN 'Carton_Started'
+        WHEN max_stat_code = '50' THEN 'Seen_by_PT'
+        ELSE 'Other'
+        END as pt_status
+    , count(distinct tote_counter) as totes
+    , sum(qty_alloc) as qty_alloc
+    , sum(qty_picked) as qty_picked
+    , WAVE_TYPE,
+CASE
+    WHEN wave_type_desc like '%Footwear%' 
+         AND WAVE_TYPE like '%MA3%' 
+         -- This replicates your condition that TandEFilter would have had 'Other'
+         AND (
+              wave_type_desc not like 'E-Com%' 
+              AND wave_desc not like '%PT%' 
+              AND wave_type_desc not like '%Transfers%' 
+              AND wave_desc not like 'MIL 1-INV%' 
+              AND wave_desc not like 'MIL 1- INV%' 
+              AND wave_desc not like 'MIL E%' 
+              AND wave_desc not like 'PP%'
+         ) 
+    THEN 'Footwear Retail'
+    WHEN wave_type_desc like 'E-Com%' THEN 'Ecom PT'
+    WHEN wave_desc like '%PT%' THEN 'Ecom PT'
+    WHEN wave_type_desc like '%Transfers%' THEN 'Transfers'
+    WHEN wave_desc like 'MIL 1-INV%' THEN 'ECOMM MIL'
+    WHEN wave_desc like 'MIL 1- INV%' THEN 'ECOMM MIL'    
+    WHEN wave_desc like 'MIL E%' THEN 'ECOMM MIL'
+    WHEN wave_desc like 'PP%' THEN 
+        CASE 
+            WHEN WAVE_TYPE like ('%MIL%') THEN 'ECOMM MIL'
+            ELSE 'Ecom PT'
+        END
+    ELSE 'RETAIL'
+END as TandEFilter
+
+
+from (
+    select
+        user_assigned
+        , WAVE_TYPE
+        , wave_nbr
+        , wave_type_desc
+        , wave_desc
+        , task_id
+        , carton_nbr
+        , zone
+        , nvl(task_id, carton_nbr) as tote_counter
+        , inducted_tote
+        , min(pt_stat_code) as min_stat_code
+        , CASE WHEN max(th_stat) in ('5','05') and max(pt_stat_code) = '10' THEN 6 ELSE max(pt_stat_code) END as max_stat_code
+        , sum(qty_alloc) as qty_alloc
+        , sum(qty_pulld) as qty_picked
+        
+    from (
+        select nvl(lh.area||lh.zone, '00'),
+            pl.user_id as user_assigned
+            , wp.pick_locn_assign_type
+            , l.wave_nbr
+            , wp.wave_desc
+            , c.code_desc as wave_type_desc
+            , l.container_type
+            , l.container_size
+            , td.task_id
+            , case when td.task_id is null then aid.carton_nbr else null end as carton_nbr
+            , l.tc_order_id
+            , aid.stat_code
+            , aid.misc_alpha_field_2 as inducted_tote
+            , td.task_type
+            , aid.pikr_nbr as zone
+            , aid.qty_alloc
+            , aid.qty_pulld
+            , lh.dsp_locn
+            , l.tc_lpn_id
+            , l.ship_via
+            , td.stat_code as td_stat
+            , nvl(th.stat_code,50) as th_stat
+            , nvl(to_number(l.misc_instr_code_3),0) as pt_stat_code    
+            -- TESTING
+            , nvl(aid.task_type,'00') AID_TASK_TYPE
+            , nvl(td.task_type, '00') TD_TASK_TYPE
+            , wp.day_of_week
+            , wp.shift_nbr
+            , swp.wave_desc sw_wave_desc
+ 
+, CASE 
+    WHEN nvl(lh.area||lh.zone, '00') in ('AS1', 'AS2', 'AS3', 'PA1', 'PA2', 'PA3') THEN 'MIS | AS1, AS2, AS3'
+    WHEN nvl(lh.area||lh.zone, '00') in ('MA4') THEN 'MIL | MA4'
+    WHEN nvl(lh.area||lh.zone, '00') in ('MA3') THEN 'MIL | MA3'
+    WHEN nvl(lh.area||lh.zone, '00') in ('MA1', 'MN1') 
+        THEN CASE 
+            WHEN wp.wave_desc like 'MIL 1-INV Mats%' THEN 'MIL | MA4'
+            ELSE 'MIL | MA1'
+        END
+    ELSE nvl(lh.area||lh.zone, '00') 
+END as WAVE_TYPE
+        from wm.lpn l
+        inner join wm.alloc_invn_dtl aid on l.tc_lpn_id = aid.carton_nbr
+        left outer join wm.locn_hdr lh on aid.pull_locn_id = lh.locn_id
+        left outer join wm.task_dtl td on l.tc_lpn_id = td.carton_nbr and td.task_genrtn_ref_code not in ('15')
+        left outer join wm.task_hdr th on td.task_id = th.task_id
+        left outer join wm.wave_parm wp on l.wave_nbr = wp.wave_nbr
+        -- ADDED TO USE ship_wave_parm.wave_desc TO FILTER OUT Gr800 WAVES
+        left outer join wm.ship_wave_parm swp on l.wave_nbr = swp.ship_wave_nbr
+        left outer join (
+            select code_id, code_desc 
+            from wm.sys_code 
+            where code_type = '325' 
+            ) c on wp.alloc_type = c.code_id -- alloc type desc
+        left outer join (select substr(proc_key,0,12) as proc_key, user_id from wm.proc_lock ) pl on l.wave_nbr = pl.proc_key
+        -- JOINING IN TO FILTER OUT BAGS/MATS
+        left outer join wm.item_cbo ic on td.item_id = ic.item_id
+        left outer join wm.product_class pc on ic.product_class_id = pc.product_class_id
+ 
+        where
+            --l.wave_nbr in ('202012110061','202012140064','202012110044')
+            --and l.tc_lpn_id = '00000999990162187228'
+            l.inbound_outbound_indicator = 'O'   
+            --KP (7/21/21): adding AS4 and PA1 as area||zones are in MIS and will be used for Carton Start
+            -- CP (9/21/21): Added MA1 for 1 invn / Milton picks
+            and nvl(lh.area||lh.zone, '00') in ('AS1','AS2','AS3','AS4','PA1','MA1','MN1','MA3','MA4','PA2','PA3','MH0','MH1') 
+            and l.wave_nbr > '202107220007' --KP: (7/22/21): added to exclude waves before 7/22/22 carton start go-live (last ecom wave before go-live is '2021072200007')
+            and l.misc_instr_code_3 in ('5','05','10')
+            and l.lpn_facility_status < '90'
+            and nvl(th.stat_code,50) < '60'
+            --and upper(c.code_desc) like 'MIL%' --OR and upper(c.code_desc) like 'PP%' --KP: (3/2/22)
+            -- 7 = AS4/PA1, 5 = AS1/AS2 pick tower, 6 = Milton
+            and wp.day_of_week in ('5','6','7', '1')
+            --and nvl(td.task_type,'00') not in ('32', '4E', '4F', '4N', '5A', '5B', '5D', '5G', '5J', '5N', 'E8', 'AP', 'FC', 'FF', 'FG', 'FR', 'FS', 'FX'
+                -- COL
+                --,'GC','GT','ST','EF','IS','IG','26'
+                -- TOR after PT 
+                --, 'FR','IT','1C','FT','RT','AP','4D','4B','4C','4M','4O','4H'
+                --)
+
+        order by aid.task_genrtn_ref_nbr desc
+        )
+    group by
+        user_assigned
+        , wave_nbr
+        , wave_type_desc
+        , wave_desc
+        --, container_type
+        --, container_size
+        , task_id
+        , carton_nbr
+        , zone
+        , inducted_tote
+        , WAVE_TYPE
+    )
+group by
+    user_assigned
+    , wave_nbr
+    , wave_type_desc
+    , wave_desc
+    --, container_type
+    --, container_size
+    , max_stat_code
+    , WAVE_TYPE
+order by 
+    wave_nbr
