@@ -100,6 +100,7 @@ from (
     WHEN nvl(lh.area||lh.zone, '00') in ('AS1', 'AS2', 'AS3', 'PA1', 'PA2', 'PA3') THEN 'MIS | AS1, AS2, AS3'
     WHEN nvl(lh.area||lh.zone, '00') in ('MA4') THEN 'MIL | MA4'
     WHEN nvl(lh.area||lh.zone, '00') in ('MA3') THEN 'MIL | MA3'
+    WHEN nvl(lh.area||lh.zone, '00') in ('MH1') THEN 'MIL | MA1'
     WHEN nvl(lh.area||lh.zone, '00') in ('MA1', 'MN1') 
         THEN CASE 
             WHEN wp.wave_desc like 'MIL 1-INV Mats%' THEN 'MIL | MA4'
