@@ -1,5 +1,5 @@
-select * from wm.task_hdr where TASK_ID = '19996143';
-select * from wm.task_dtl where task_id = '19779416';
+select * from wm.task_hdr where TASK_ID = '20231473';
+select * from wm.task_dtl where task_id = '20231473';
 
 select * from wm.task_dtl where TOTE_NBR ='TT1405' and stat_code<90;---CNTR_NBR ='1201370032';
 
@@ -7,8 +7,8 @@ select* from wm.SYS_CODE
 select* from wm.task_dtl where pull_locn_id='0797576' and stat_code<90; 
 --and DEST_LOCN_ID = '614264'--AND stat_code<90;
 
-select* from wm.locn_hdr where DSP_LOCN = 'MA3-08-05-B01';
-
+select* from wm.locn_hdr where LOCN_BRCD='AS11114B03'---DSP_LOCN = 'MA3-08-05-B01';
+SELECT* FROM WM.WAVE_PARM
 SELECT* from wm.lpn_lock where tc_lpn_id='2205798256';
 
 select* from WM.pick_locn_dtl where locn_id ='0871127';
@@ -16,9 +16,18 @@ select * from locn_hdr where dsp_locn like 'MH1%';
 
 select* from wm.SHIP_VIA
 
-select * from wm.c_enroute_tran where  STAT_CODE< 90 and tc_lpn_id = '00000999990762626615' order by created_dttm desc;  
+select * from wm.c_enroute_tran where  STAT_CODE< 90 and tc_lpn_id = '00000999990766960050' order by created_dttm desc;  
 
-select * from WM.c_item_trade_rate where item_name='144361604';
+select * from WM.c_item_trade_rate where item_name='153881525';
+
+
+SELECT *
+FROM WM.c_item_trade_rate
+WHERE item_name IN ('153881525', '151675533', '145452131', '151676529', '147032961', '144526299', '153837375')
+AND item_name NOT IN (
+    SELECT item_name 
+    FROM WM.c_item_trade_rate
+    WHERE dest_cntry = 'GU');
 
 select* from wm.pick_locn_dtl pld join wm.locn_hdr lh on lh.locn_id = pld.locn_id where lh.dsp_locn = ' CR103-13-A01';
 
@@ -41,7 +50,7 @@ select* from wm.task_dtl where TASK_GENRTN_REF_NBR='202402020064' and Misc_alpha
 
 Select * from wm.lpn where tc_shipment_id ='LL1269539' and lpn_facility_status<90;
 
-select* from wm.item_cbo where ITEM_NAME= '120925044';
+select* from wm.item_cbo where ITEM_NAME= '136303972';
 
 select*from wm.wm_inventory;
 
@@ -88,21 +97,20 @@ WHERE tc_order_id IN ('463102534','463109178','463102544','463104984','463105119
 
  
     SELECT* FROM WM.Ucl_user     where USER_NAME = 'GASINGH'
-
+select* from wm.lpn where tc_lpn_id = '23463' and user password = 'tyu' and wm.login also 
 
 select* from wm.COMPANY
 
 update WM.LRF_user_pro set PRTR_REQSTR ='FRCH402'
 
-where user_pro_id ='24359' and user_id ='MMALINAT';
+where user_pro_id ='24359' and user_id ='JASKUMAR';
 
 commit;
 
 
 Select * from wm.Prod_trkg_tran where tc_order_id = 'c171658851736681_202405241615569072380165'
 
-SELECT* FROM WM.TASK_DTL WHERE CNTR_NBR = 'BLM00000000008273802';
-
+SELECT* FROM WM.TASK_GRP_EQUIP_ELGBLTY
 
 
 
