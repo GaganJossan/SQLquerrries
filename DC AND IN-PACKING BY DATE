@@ -1,0 +1,97 @@
+WITH DistinctZones AS (
+    SELECT DISTINCT
+        NVL(WM.ALLOC_INVN_DTL.MISC_ALPHA_FIELD_2, 'N/A') AS Tote_Nbr,
+        WM.ALLOC_INVN_DTL.PIKR_NBR AS Zone,
+        WM.TASK_DTL.TASK_HDR_ID AS Task_HDR_ID, -- Task_HDR_ID from wm.task_hdr
+        WM.TASK_DTL.TASK_ID AS Task_ID, -- Task_ID from wm.task (this will be removed later)
+        WM.TASK_HDR.STAT_CODE AS Stat_Code, -- Including Stat_Code from wm.task_hdr
+        WM.TASK_HDR.TASK_DESC AS Task_Desc,
+        WM.ALLOC_INVN_DTL.TC_ORDER_ID AS order_id,
+        WM.TASK_DTL.INVN_TYPE -- Including INVN_TYPE
+    FROM WM.ALLOC_INVN_DTL
+    JOIN WM.TASK_DTL ON WM.ALLOC_INVN_DTL.TC_ORDER_ID = WM.TASK_DTL.TC_ORDER_ID
+    JOIN WM.LPN ON WM.ALLOC_INVN_DTL.TASK_CMPL_REF_NBR = WM.LPN.TC_LPN_ID
+    JOIN WM.TASK_HDR ON WM.TASK_DTL.TASK_HDR_ID = WM.TASK_HDR.TASK_ID -- Ensuring join for Task_HDR_ID
+    WHERE WM.ALLOC_INVN_DTL.STAT_CODE > 90
+    AND WM.LPN.LPN_FACILITY_STATUS = '10'
+    AND WM.TASK_HDR.TASK_DESC IS NOT NULL
+  AND WM.ALLOC_INVN_DTL.TC_ORDER_ID LIKE ('%20241028%')
+    --AND WM.ALLOC_INVN_DTL.TC_ORDER_ID IN ('c173004138766295_202410282107032944560125')
+),    
+FilteredDistinctZones AS (
+    SELECT
+        dz.Tote_Nbr,
+        dz.Zone,
+        dz.Task_HDR_ID, -- Including Task_HDR_ID from wm.task_hdr
+        dz.Stat_Code, -- Including Stat_Code from wm.task_hdr
+        dz.Task_Desc,
+        dz.order_id,
+        dz.INVN_TYPE 
+    FROM DistinctZones dz
+    JOIN WM.TASK_DTL td ON dz.Tote_Nbr = NVL(td.MISC_ALPHA_FIELD_2, 'N/A')
+    WHERE dz.Task_HDR_ID = td.TASK_HDR_ID
+),
+UniqueZones AS (
+    SELECT
+        Tote_Nbr,
+        LISTAGG(DISTINCT Zone, ',') WITHIN GROUP (ORDER BY Zone) AS Zones,
+        LISTAGG(DISTINCT Task_HDR_ID, ',') WITHIN GROUP (ORDER BY Task_HDR_ID) AS Task_HDR_ID, -- Task_HDR_ID aggregation
+        MIN(Stat_Code) AS Min_Stat_Code, -- Keeping Stat_Code in aggregation
+        MAX(Stat_Code) AS Max_Stat_Code, -- Keeping Stat_Code in aggregation
+        MAX(Task_Desc) AS Task_Desc,
+        order_id,
+        MAX(INVN_TYPE) AS INVN_TYPE 
+    FROM FilteredDistinctZones
+    GROUP BY Tote_Nbr, order_id
+),
+ZoneLabels AS (
+    SELECT
+        Tote_Nbr,
+        Task_HDR_ID, -- Carrying Task_HDR_ID to final result
+        Min_Stat_Code, -- Carrying Min Stat_Code to final result
+        Max_Stat_Code, -- Carrying Max Stat_Code to final result
+        Task_Desc,
+        order_id,
+        INVN_TYPE, 
+        CASE
+            WHEN INSTR(Zones, '95') > 0 AND REGEXP_LIKE(Zones, '(11|13|21|23|31|33)') THEN 'MIL and MIS'
+            WHEN INSTR(Zones, '95') > 0 THEN 'MIL'
+            WHEN REGEXP_LIKE(Zones, '(11|13|21|23|31|33)') THEN 'MIS'
+            ELSE Zones
+        END AS Zone
+    FROM UniqueZones
+)
+SELECT
+    CASE 
+        WHEN zl.Tote_Nbr = 'N/A' THEN NULL
+        ELSE zl.Tote_Nbr
+    END AS Tote_Nbr,
+    zl.Task_HDR_ID AS Task_HDR_ID, -- Displaying Task_HDR_ID in final select
+    CASE
+        WHEN zl.Min_Stat_Code = 5 THEN 'LOCKED/DISABLED' -- New condition for NEED TO INDUCT
+        WHEN zl.Min_Stat_Code = 99 AND zl.Max_Stat_Code = 99 THEN 'PACKING PENDING'
+        ELSE 'PICKING PENDING'
+    END AS Status, -- Adjusted CASE statement to handle the new status condition
+    zl.Zone,
+    zl.Task_Desc,
+    CASE 
+        WHEN lh.DSP_LOCN = 'PAP-00-00-001' THEN 'YES'
+        ELSE 'NO'
+    END AS SHUNT_TO_MISS,
+    CASE
+        WHEN zl.INVN_TYPE = 'R' AND lh.DSP_LOCN = 'ECM-00-00-TAG' THEN 'YES'
+        ELSE 'NO'
+    END AS Tote_Detag
+FROM ZoneLabels zl
+LEFT JOIN WM.LPN lpn ON zl.Tote_Nbr = lpn.TC_LPN_ID
+LEFT JOIN WM.LOCN_HDR lh ON lpn.CURR_SUB_LOCN_ID = lh.LOCN_ID
+LEFT JOIN WM.WM_INVENTORY wi ON lpn.TC_LPN_ID = wi.TC_LPN_ID
+GROUP BY 
+    zl.Tote_Nbr,
+    zl.Task_HDR_ID, -- Grouping by Task_HDR_ID
+    zl.Min_Stat_Code, -- Grouping by Stat_Code (Min Stat_Code)
+    zl.Max_Stat_Code,
+    zl.Task_Desc,
+    zl.Zone,
+    lh.DSP_LOCN,
+    zl.INVN_TYPE;
