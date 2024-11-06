@@ -71,8 +71,15 @@ FROM
             'ECM Resume Putwall Cart'
         )
          and s.shift_code IN (#promptmany('SHIFT', 'varchar', 's.shift_code')#)
+         and (CASE 
+                WHEN nvl(lh.area || lh.zone, '') = 'AS1' THEN 'AS1'
+                WHEN nvl(lh.area || lh.zone, '') = 'AS2' THEN 'AS2'
+                WHEN nvl(lh.area || lh.zone, '') = 'AS3' THEN 'AS3'
+                WHEN nvl(lh.area || lh.zone, '') = 'MN1' THEN 'SA'
+                ELSE 'Other' 
+              END) IN (#Promptmany('pTote', 'varchar', 'Zone')#)
 	and cast(ptt.begin_date+wh.TIME_ZONE as timestamp) >= cast(to_date(substr(#Prompt('pStartDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') as timestamp)
-and cast(ptt.begin_date+wh.TIME_ZONE as timestamp) <= cast(to_date(substr(#Prompt('pEndDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') as timestamp)
+        and cast(ptt.begin_date+wh.TIME_ZONE as timestamp) <= cast(to_date(substr(#Prompt('pEndDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') as timestamp)
     GROUP BY
         ptt.begin_date,
         o.order_type,
@@ -92,3 +99,4 @@ GROUP BY
     Zone
 ORDER BY
     user_id, "Order Type", Zone;
+
