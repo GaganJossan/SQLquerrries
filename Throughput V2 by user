@@ -1,0 +1,94 @@
+SELECT
+    user_id,
+    "Order Type",
+    Zone,
+    count(distinct order_id) as orders,
+    sum("Units Picked") as Units_Picked
+FROM
+(
+    SELECT
+        ptt.begin_date + wh.TIME_ZONE as begin_time,
+        ptt.user_id,
+        s.shift,
+        o.tc_order_id as Order_ID,
+        to_char(sysdate + wh.UTC_ADJ , 'MM/DD HH24:MI:SS') as sys_time,
+        to_char(ptt.begin_date + wh.TIME_ZONE , 'MM/DD/YYYY') as "Process Date",
+        to_char(ptt.begin_date + wh.TIME_ZONE , 'HH24') as "Hour",
+        CASE 
+            WHEN nvl(lh.area || lh.zone, '') = 'AS1' THEN 'AS1'
+            WHEN nvl(lh.area || lh.zone, '') = 'AS2' THEN 'AS2'
+            WHEN nvl(lh.area || lh.zone, '') = 'AS3' THEN 'AS3'
+            WHEN nvl(lh.area || lh.zone, '') = 'MN1' THEN 'SA'
+            ELSE 'Other' 
+        END as Zone,
+        CASE 
+            WHEN o.order_type in ('ALLOC', 'REPLEN', 'SPECIAL') THEN 'Retail'
+            WHEN o.order_type = 'ECOMM' AND o.TOTAL_NBR_OF_UNITS > 1 THEN 'Ecomm - Multi'
+            ELSE 'Ecomm - Single' 
+        END as "Order Type",
+        sum(ptt.nbr_units) as "Units Picked"
+    FROM
+        wm.orders o
+        INNER JOIN wm.order_line_item oli ON oli.order_id = o.order_id
+        INNER JOIN wm.prod_trkg_tran ptt ON ptt.tc_order_id = o.tc_order_id AND oli.line_item_id = ptt.line_item_id
+        LEFT OUTER JOIN wm.locn_hdr lh ON ptt.from_locn = lh.locn_id
+        LEFT OUTER JOIN (
+            SELECT 
+                uu.user_name, 
+                ed.emp_id, 
+                s.shift_code, 
+                ed.shift_id, 
+                substr(s.shift_code, 0, 1) as Shift 
+            FROM 
+                (SELECT emp_id, shift_id, rank() OVER (PARTITION BY EMP_ID ORDER BY MAX(EFF_DATE_TIME) DESC) as rnk 
+                 FROM wm.e_emp_dtl WHERE eff_date_time <= trunc(sysdate) 
+                 GROUP BY emp_id, shift_id) ed
+            INNER JOIN wm.ucl_user uu ON ed.emp_id = uu.ucl_user_id
+            INNER JOIN wm.e_shift s ON ed.shift_id = s.shift_id
+            WHERE rnk = 1
+        ) s ON ptt.user_id = s.user_name,
+        (SELECT 
+            sum(case WHEN trim(pay_scale) = 'TIME_ZONE' THEN to_number(pay_scale_desc) / 24 END) as TIME_ZONE,
+            sum(case WHEN trim(pay_scale) = 'UTC_ADJ' THEN to_number(pay_scale_desc) / 24 END) as UTC_ADJ,
+            sum(case WHEN trim(pay_scale) = 'SHIFT_ADJ' THEN to_number(pay_scale_desc) / 24 END) as SHIFT_ADJ 
+         FROM wm.e_pay_scale 
+         WHERE pay_scale IN ('TIME_ZONE', 'SHIFT_ADJ', 'UTC_ADJ')
+        ) wh
+    WHERE
+        o.order_type = 'ECOMM' AND
+        ptt.nbr_units > 0 AND
+        ptt.tran_type = '500' AND
+        ptt.item_id IS NOT NULL AND
+        ptt.menu_optn_name IN (
+            'Pick to Tote SA', 'Pick To Tote', 'Pick to Tote Int', 'Pck Pick Cart', 
+            'Pack Pick Cart Put Wall', 'Pck Pick Cart Int', 'Pck Cubed Dir Int', 
+            'Pick Cart Ecom', 'Build Pick Cart EX16', 'PC Rtl No Zone SA', 
+            'PC Rtl No Zone XFER', 'Pck From Tote YOGA', 'Pick Cart Ecom', 
+            'Pick to Tote', 'Pick to Tote GC', 'Pick to Tote Int', 
+            'Pick to Tote SA', 'Resume Pick Cart EX16', 'Pick to Tote ECM', 
+            'Pck Cubed Dir INT2 ECM OS', 'Pck Pick Cart ECM', 'PC Rtl No Zone SA', 
+            'Build Pick Cart EX16', 'Resume Pick Cart EX16', 'ECM Build Putwall Cart', 
+            'ECM Resume Putwall Cart'
+        )
+         and s.shift_code IN (#promptmany('SHIFT', 'varchar', 's.shift_code')#)
+	and cast(ptt.begin_date+wh.TIME_ZONE as timestamp) >= cast(to_date(substr(#Prompt('pStartDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') as timestamp)
+and cast(ptt.begin_date+wh.TIME_ZONE as timestamp) <= cast(to_date(substr(#Prompt('pEndDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') as timestamp)
+    GROUP BY
+        ptt.begin_date,
+        o.order_type,
+        ptt.user_id,
+        s.shift,
+        o.tc_order_id,
+        lh.area || lh.zone,
+        wh.TIME_ZONE,
+        wh.UTC_ADJ,
+        o.TOTAL_NBR_OF_UNITS
+    ORDER BY
+        ptt.begin_date DESC
+)
+GROUP BY
+    user_id,
+    "Order Type",
+    Zone
+ORDER BY
+    user_id, "Order Type", Zone;
