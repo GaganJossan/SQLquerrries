@@ -1,0 +1,58 @@
+WITH task_data AS (
+    SELECT 
+        WM.task_dtl.misc_alpha_field_2 AS tote_nbr, 
+        CASE 
+            WHEN WM.task_dtl.pikr_nbr IN ('11', '21', '23', '13', '31', '33') THEN 'MISS'
+            ELSE 'MIL'
+        END AS zone_label,
+        WM.task_dtl.create_date_time, 
+        WM.task_dtl.task_id,
+        wm.task_hdr.task_desc,
+        WM.task_dtl.MOD_DATE_TIME
+    FROM 
+        WM.task_dtl 
+    JOIN wm.task_hdr ON wm.task_hdr.task_id = wm.task_dtl.task_id 
+    WHERE 
+        WM.task_dtl.misc_alpha_field_2 IN (#Promptmany('pTote')#) 
+),
+aggregated_data AS (
+    SELECT 
+        tote_nbr,
+        task_id,
+        LISTAGG(DISTINCT zone_label, ',') WITHIN GROUP (ORDER BY zone_label) AS Zone,
+        TO_CHAR(MIN(MOD_DATE_TIME), 'DD-MON-YY') AS tote_create_date_time,
+        CASE 
+            WHEN MAX(task_desc) LIKE '%Pass%' THEN 'YES' 
+            ELSE 'NO'
+        END AS PICK_AND_PASS,
+        MIN(MOD_DATE_TIME) AS earliest_mod_date_time
+    FROM 
+        task_data
+    GROUP BY 
+        tote_nbr,
+        task_id
+),
+final_data AS (
+    SELECT 
+        tote_nbr,
+        task_id,
+        Zone,
+        tote_create_date_time,
+        PICK_AND_PASS,
+        earliest_mod_date_time,
+        ROW_NUMBER() OVER (PARTITION BY tote_nbr ORDER BY earliest_mod_date_time DESC) AS rn
+    FROM 
+        aggregated_data
+)
+SELECT 
+    tote_nbr,
+    task_id,
+    Zone,
+    tote_create_date_time,
+    PICK_AND_PASS
+FROM 
+    final_data
+WHERE 
+    rn = 1
+ORDER BY 
+    earliest_mod_date_time DESC;
