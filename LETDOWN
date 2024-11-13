@@ -1,0 +1,25 @@
+SELECT DISTINCT
+    ptt.user_id AS "User ID",
+    TO_CHAR(ptt.begin_date + INTERVAL '3' HOUR) AS "date and time",
+    TO_CHAR(ptt.begin_date + INTERVAL '3' HOUR, 'DD-MON-YYYY') AS "Date",
+    TO_CHAR(ptt.begin_date + INTERVAL '3' HOUR, 'HH24:MI:SS') AS "Time",
+    ptt.cntr_nbr AS "LPN",
+    lh.dsp_locn AS "To Locn",
+    lhh.dsp_locn AS "From Locn", 
+    DECODE(task_type, task_type, (SELECT code_desc FROM sys_code WHERE rec_type = 'S' AND code_type = '590' AND code_id = task_type)) AS "Task Type",
+    CASE 
+        WHEN LOWER((SELECT code_desc FROM sys_code WHERE rec_type = 'S' AND code_type = '590' AND code_id = task_type)) LIKE '%letdown%' THEN 'Letdown'
+        ELSE 'Recall'
+    END AS "Task",
+    CASE 
+        WHEN lh.work_grp IN ('SHLF','CRAK','DROP','MRCV') THEN 'Mississauga'
+        WHEN lh.work_grp IN ('MFLW', 'MRPH', 'MACT', 'MRAK','MDRP') THEN 'Milton'
+        WHEN lhh.dsp_locn LIKE('MC%') THEN 'Milton'
+        WHEN lhh.dsp_locn LIKE('CR%') THEN 'Mississauga'
+        ELSE lh.work_grp
+    END AS Facility
+FROM PROD_TRKG_TRAN ptt
+INNER JOIN task_hdr th ON ptt.task_id = th.task_id
+INNER JOIN locn_hdr lh ON ptt.TO_LOCN = lh.locn_id
+INNER JOIN locn_hdr lhh ON ptt.FROM_Locn = lhh.locn_id
+WHERE ptt.MENU_OPTN_NAME IN ('Pull iLPN List', 'Pull iLPN List Pick Tower');
