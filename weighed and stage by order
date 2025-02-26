@@ -1,0 +1,51 @@
+SELECT 
+    wm.lpn.tc_order_id AS tc_order_id,
+    CASE 
+        WHEN wm.orders.do_status = 130 THEN 'DC Allocated'
+        WHEN wm.orders.do_status = 140 THEN 'In Packing'
+        WHEN wm.orders.do_status = 150 THEN 'Packed'
+        WHEN wm.orders.do_status = 160 THEN 'Weighed'
+        WHEN wm.orders.do_status = 170 THEN 'Manifested'
+        WHEN wm.orders.do_status = 180 THEN 'Loaded'
+        WHEN wm.orders.do_status = 190 THEN 'Shipped'
+        WHEN wm.orders.do_status = 200 THEN 'Cancelled'
+        WHEN wm.orders.do_status = 185 THEN 'Partially Shipped'
+        WHEN wm.orders.do_status = 165 THEN 'Staged'
+        ELSE 'Unknown'
+    END AS Order_Status,
+    wm.orders.TOTAL_NBR_OF_UNITS as DO_Qty,
+    wm.lpn.tc_lpn_id,
+    CASE 
+        WHEN wm.lpn.lpn_facility_status = 10 THEN 'Printed'
+        WHEN wm.lpn.lpn_facility_status = 12 THEN 'Released'
+        WHEN wm.lpn.lpn_facility_status = 15 THEN 'In Packing'
+        WHEN wm.lpn.lpn_facility_status = 20 THEN 'Packed'
+        WHEN wm.lpn.lpn_facility_status = 30 THEN 'Weighed'
+        WHEN wm.lpn.lpn_facility_status = 40 THEN 'Manifested'
+        WHEN wm.lpn.lpn_facility_status = 50 THEN 'Loaded on truck'
+        WHEN wm.lpn.lpn_facility_status = 89 THEN 'Completed VAS'
+        WHEN wm.lpn.lpn_facility_status = 90 THEN 'Shipped'
+        WHEN wm.lpn.lpn_facility_status = 99 THEN 'Cancelled'
+        ELSE 'Unknown'
+    END AS Olpn_Status,
+    wm.lpn.TOTAL_LPN_QTY,
+    wm.orders.lane_name,
+    wm.lpn.tracking_nbr,
+    wm.lpn.tc_parent_lpn_id AS Pallet_ID,
+        wm.lpn.TC_SHIPMENT_ID as SHIPMENT_ID,
+            wm.locn_hdr.dsp_locn AS CURRENT_LOCN,
+    WM.orders.LAST_UPDATED_DTTM + INTERVAL '3' HOUR AS ORDER_LAST_UPDATED_DTTM,
+    wm.orders.D_COUNTRY_CODE,
+    CASE 
+        WHEN wm.orders.D_COUNTRY_CODE = 'CA' AND WM.orders.LAST_UPDATED_DTTM + INTERVAL '3' HOUR <= SYSTIMESTAMP - INTERVAL '24' HOUR THEN 'YES'
+        WHEN wm.orders.D_COUNTRY_CODE = 'US' AND WM.orders.LAST_UPDATED_DTTM + INTERVAL '3' HOUR <= SYSTIMESTAMP - INTERVAL '48' HOUR THEN 'YES'
+        ELSE 'NO'
+    END AS Ready_to_invoice
+FROM 
+    wm.lpn 
+    LEFT JOIN wm.locn_hdr ON wm.lpn.CURR_SUB_LOCN_ID = wm.locn_hdr.locn_id
+    JOIN wm.orders ON wm.lpn.tc_order_id = wm.orders.tc_order_id
+WHERE 
+    wm.lpn.tc_order_id IN (#Promptmany('pTote')#) -- Replace these with actual tc_order_id values
+    AND wm.lpn.lpn_facility_status in ('30','50','90')
+ORDER BY wm.orders.tc_order_id
