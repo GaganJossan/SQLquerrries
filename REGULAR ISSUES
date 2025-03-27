@@ -4,7 +4,10 @@
 SELECT DISTINCT
 WM.TASK_HDR.TASK_ID,
 WM.TASK_HDR.TASK_DESC,
-WM.TASK_HDR.START_CURR_WORK_GRP
+CASE
+    WHEN WM.TASK_HDR.START_CURR_WORK_GRP = 'SHLF' THEN 'MISSISAUGA'
+    ELSE 'MILTON'
+  END AS Location
 FROM WM.TASK_DTL
 JOIN WM.TASK_HDR ON WM.TASK_DTL.TASK_ID = WM.TASK_HDR.TASK_ID
 WHERE WM.TASK_DTL.MISC_ALPHA_FIELD_2 IS NULL 
@@ -22,12 +25,12 @@ SELECT DISTINCT
     aid.pikr_nbr AS zone,
     wm.ILM_TASK_STATUS.DESCRIPTION as Status,
     wm.task_hdr.task_desc
-FROM alloc_invn_dtl aid
-JOIN task_dtl td ON (aid.alloc_invn_dtl_id = td.alloc_invn_dtl_id
+FROM WM.alloc_invn_dtl aid
+JOIN WM.task_dtl td ON (aid.alloc_invn_dtl_id = td.alloc_invn_dtl_id
     AND aid.task_genrtn_ref_nbr = td.task_genrtn_ref_nbr
     AND aid.task_genrtn_ref_Code = 1)
 JOIN wm.task_hdr ON td.TASK_ID = wm.TASK_HDR.TASK_ID
-join ILM_TASK_STATUS on wm.task_hdr.stat_code = ILM_TASK_STATUS.TASK_STATUS
+join WM.ILM_TASK_STATUS on wm.task_hdr.stat_code = WM.ILM_TASK_STATUS.TASK_STATUS
 WHERE aid.invn_need_type = 50
     AND td.stat_code < 90
     AND aid.tote_nbr IS NOT NULL;
@@ -35,10 +38,11 @@ WHERE aid.invn_need_type = 50
     
     
  ---------------ALLOCATED AND PULLED-------------------------- 
-    WITH latest_task AS (
+WITH latest_task AS (
   SELECT
     td.TOTE_NBR,
     th.stat_code,
+    th.START_CURR_WORK_GRP,  -- Included this column
     ROW_NUMBER() OVER (PARTITION BY td.TOTE_NBR ORDER BY th.CREATE_DATE_TIME DESC) AS rn
   FROM wm.task_dtl td
   JOIN wm.task_hdr th ON td.task_id = th.task_id
@@ -46,9 +50,10 @@ WHERE aid.invn_need_type = 50
 SELECT
   l.tc_lpn_id AS Tote,
   l.lpn_facility_status || ' - ' || lfs.description AS LPN_Status,
-  ic.item_bar_code AS SKU,
-  SUM(ld.size_value) AS QTY,
-  latest_task.stat_code
+  CASE
+    WHEN latest_task.START_CURR_WORK_GRP = 'SHLF' THEN 'MISSISAUGA'
+    ELSE 'MILTON'
+  END AS Location  -- Only this column
 FROM wm.lpn l
 LEFT JOIN wm.lpn_detail ld ON l.lpn_id = ld.lpn_id
 LEFT JOIN wm.item_cbo ic ON ld.item_id = ic.item_id
@@ -62,6 +67,7 @@ AND latest_task.stat_code NOT IN (13, 30, 99, 40)
 GROUP BY
     l.tc_lpn_id,
     l.lpn_facility_status || ' - ' || lfs.description,
-    ic.item_bar_code,
-    latest_task.stat_code;
+    latest_task.START_CURR_WORK_GRP;  
+
+
     
