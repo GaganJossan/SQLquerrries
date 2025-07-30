@@ -1,0 +1,75 @@
+SELECT
+   lm.sched_start_time + wh.TIME_ZONE AS begin_time,
+   lm.login_user_id,
+   TO_CHAR(SYSDATE + wh.UTC_ADJ, 'MM/DD HH24:MI:SS') AS sys_time,
+   TO_CHAR(lm.sched_start_time + wh.TIME_ZONE, 'MM/DD/YYYY') AS "Process Date",
+   TO_CHAR(lm.sched_start_time + wh.TIME_ZONE, 'HH24') AS "Hour",
+   SUM(lmd.qty) AS "Units Put",
+   CASE 
+       WHEN usr.shift_code LIKE '%M' THEN 'Milton' 
+       ELSE 'Mississauga' 
+   END AS facility,
+   CASE 
+       WHEN pc.product_class IN ('118','441','442','820','821','836','834','835','837') THEN 'Footwear' 
+       ELSE 'Non-Footwear' 
+   END AS footwear_indicator
+
+FROM wm.labor_msg lm 
+INNER JOIN wm.labor_msg_dtl lmd 
+    ON lm.labor_msg_id = lmd.labor_msg_id
+LEFT OUTER JOIN wm.item_cbo ic 
+    ON ic.item_name = lmd.item_name
+LEFT OUTER JOIN wm.product_class pc 
+    ON ic.product_class_id = pc.product_class_id
+
+LEFT OUTER JOIN (
+    SELECT 
+        uu.user_name, 
+        ed.emp_id,
+        MAX(d.shift_code) AS shift_code,
+        MAX(ed.eff_date_time) AS eff_date_time
+    FROM (
+        SELECT 
+            emp_id, 
+            shift_id, 
+            eff_date_time,
+            RANK() OVER (PARTITION BY emp_id ORDER BY eff_date_time DESC) AS rnk
+        FROM wm.e_emp_dtl 
+        WHERE eff_date_time <= TRUNC(SYSDATE)
+        GROUP BY emp_id, shift_id, eff_date_time
+    ) ed 
+    INNER JOIN wm.ucl_user uu 
+        ON ed.emp_id = uu.ucl_user_id 
+    INNER JOIN wm.e_shift d 
+        ON ed.shift_id = d.shift_id 
+    WHERE d.shift_code LIKE '%M'
+    GROUP BY uu.user_name, ed.emp_id
+) usr 
+    ON lm.login_user_id = usr.user_name
+
+CROSS JOIN (
+    SELECT 
+        SUM(CASE WHEN TRIM(pay_scale) = 'TIME_ZONE' THEN TO_NUMBER(pay_scale_desc)/24 ELSE 0 END) AS TIME_ZONE,
+        SUM(CASE WHEN TRIM(pay_scale) = 'UTC_ADJ' THEN TO_NUMBER(pay_scale_desc)/24 ELSE 0 END) AS UTC_ADJ,
+        SUM(CASE WHEN TRIM(pay_scale) = 'SHIFT_ADJ' THEN TO_NUMBER(pay_scale_desc)/24 ELSE 0 END) AS SHIFT_ADJ
+    FROM wm.e_pay_scale 
+    WHERE pay_scale IN ('TIME_ZONE','SHIFT_ADJ','UTC_ADJ')
+) wh
+
+WHERE
+   lmd.qty > 0
+   AND lm.act_name IN ('02-0422','02-0322','02-0320')
+   -- Uncomment the below when using with prompts:
+   -- AND CAST(lm.sched_start_time + wh.TIME_ZONE AS TIMESTAMP) >= CAST(TO_DATE(SUBSTR(#Prompt('pStartDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') AS TIMESTAMP)
+   -- AND CAST(lm.sched_start_time + wh.TIME_ZONE AS TIMESTAMP) <= CAST(TO_DATE(SUBSTR(#Prompt('pEndDateTime')#,0,19),'YYYY-MM-DD"T"HH24:mi:ss') AS TIMESTAMP)
+
+GROUP BY
+    lm.sched_start_time,
+    lm.login_user_id,
+    wh.TIME_ZONE,
+    wh.UTC_ADJ,
+    CASE WHEN usr.shift_code LIKE '%M' THEN 'Milton' ELSE 'Mississauga' END,
+    CASE WHEN pc.product_class IN ('118','441','442','820','821','836','834','835','837') THEN 'Footwear' ELSE 'Non-Footwear' END
+
+ORDER BY
+    lm.sched_start_time DESC;
