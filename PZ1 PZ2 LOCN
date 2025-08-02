@@ -1,0 +1,20 @@
+SELECT 
+wm.locn_hdr.locn_id,
+    wm.locn_hdr.dsp_locn,
+    wm.resv_locn_hdr.CURR_VOL,
+    wm.resv_locn_hdr.MAX_VOL,
+    wm.resv_locn_hdr.CURR_WT,
+    wm.resv_locn_hdr.MAX_WT,
+    CASE 
+        WHEN wm.resv_locn_hdr.CURR_WT > wm.resv_locn_hdr.MAX_WT THEN 'Weight Exceeded'
+        WHEN wm.resv_locn_hdr.CURR_VOL > wm.resv_locn_hdr.MAX_VOL THEN 'Volume Exceeded'
+        ELSE 'Within Limits'
+    END AS Alert
+FROM 
+    wm.locn_hdr
+LEFT JOIN 
+    wm.resv_locn_hdr 
+ON 
+    wm.locn_hdr.locn_id = wm.resv_locn_hdr.locn_id
+WHERE 
+    wm.locn_hdr.dsp_locn LIKE 'PZ%';
