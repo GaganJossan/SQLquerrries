@@ -2,6 +2,16 @@ SELECT
     o.ORDER_DATE_DTTM,
     o.tc_order_id,
     l.tc_lpn_id,
+
+    -- Human readable LAST_UPDATED with +3 hours adjustment
+    CASE 
+        WHEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) > 0
+            THEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' days ago'
+        WHEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) > 0
+            THEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' hours ago'
+        ELSE ROUND(EXTRACT(MINUTE FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' minutes ago'
+    END AS LAST_UPDATED_AGO,
+
     oi.INVN_TYPE,
     CASE l.lpn_facility_status
         WHEN 10 THEN 'Printed'
@@ -78,15 +88,14 @@ LEFT JOIN wm.wm_inventory wmi
 
 WHERE o.DO_STATUS = '150'
   AND o.order_type = 'ECOMM'
-  AND l.LPN_FACILITY_STATUS not in  ('30','50')
-  AND l.FIRST_ZONE = '95'
- AND l.LAST_ZONE = '95'
- and l.tc_reference_lpn_id is null
+  AND l.LPN_FACILITY_STATUS not in ('30','50')
+  AND l.tc_reference_lpn_id is null
 
 GROUP BY 
     o.ORDER_DATE_DTTM,
     o.tc_order_id,
     l.tc_lpn_id,
+    l.LAST_UPDATED_DTTM,
     l.lpn_facility_status,
     oi.ITEM_NAME,
     oi.INVN_TYPE,
