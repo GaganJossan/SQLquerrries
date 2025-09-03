@@ -2,6 +2,7 @@ SELECT
     o.ORDER_DATE_DTTM,
     o.tc_order_id,
     l.tc_lpn_id,
+    oi.INVN_TYPE,
     CASE l.lpn_facility_status
         WHEN 10 THEN 'Printed'
         WHEN 12 THEN 'Released'
@@ -17,7 +18,6 @@ SELECT
     END AS lpn_facility_status_desc,
     oi.ITEM_NAME,
     l.REF_FIELD_3 AS Putwall,
-    l.tracking_nbr,
     o.D_COUNTRY_CODE,
 
     -- FLAG with first ERROR_MESSAGE for INVALID OLPN
@@ -78,9 +78,10 @@ LEFT JOIN wm.wm_inventory wmi
 
 WHERE o.DO_STATUS = '150'
   AND o.order_type = 'ECOMM'
-  AND l.LPN_FACILITY_STATUS != 30
+  AND l.LPN_FACILITY_STATUS not in  ('30','50')
   AND l.FIRST_ZONE = '95'
  AND l.LAST_ZONE = '95'
+ and l.tc_reference_lpn_id is null
 
 GROUP BY 
     o.ORDER_DATE_DTTM,
