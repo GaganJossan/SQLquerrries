@@ -1,5 +1,5 @@
 SELECT 
-    o.ORDER_DATE_DTTM,
+    TO_CHAR(o.CREATED_DTTM, 'YY-MM-DD') AS CREATED_DATE,
     o.tc_order_id,
     l.tc_lpn_id,
 
@@ -29,13 +29,18 @@ SELECT
     l.REF_FIELD_3 AS Putwall,
     o.D_COUNTRY_CODE,
 
-    CASE
-        
+    -- ✅ New Case for Milton / Mississauga
+    CASE 
+        WHEN l.FIRST_ZONE = '95' AND l.LAST_ZONE = '95' 
+            THEN 'Milton'
+        ELSE 'Mississauga'
+    END AS LOCATION,
+
+    CASE        
         WHEN l.lpn_facility_status = 20
              AND l.REF_FIELD_3 IS NOT NULL
              AND l.tracking_nbr IS NOT NULL
         THEN 'PACK AT PUTWALL ' || l.REF_FIELD_3
-
       
         WHEN l.lpn_facility_status IN (20, 30)
              AND l.REF_FIELD_3 IS NOT NULL
@@ -49,7 +54,6 @@ SELECT
                   FETCH FIRST 1 ROW ONLY),
                  'INVALID OLPN'
              )
-
         
         WHEN l.lpn_facility_status = 99
              AND SUM(
@@ -86,13 +90,13 @@ LEFT JOIN wm.wm_inventory wmi
 
 WHERE o.DO_STATUS = '150'
   AND o.order_type = 'ECOMM'
-  AND l.LPN_FACILITY_STATUS not in ('30','50')
-  AND l.tc_reference_lpn_id is null
-AND l.FIRST_ZONE = '95'
-AND l.LAST_ZONE = '95'
+  AND l.LPN_FACILITY_STATUS in ('20','99')
+  AND l.tc_reference_lpn_id IS NULL
+  --and l.FIRST_ZONE = '95'
+  --and l.LAST_ZONE = '95'
 
 GROUP BY 
-    o.ORDER_DATE_DTTM,
+    o.CREATED_DTTM,
     o.tc_order_id,
     l.tc_lpn_id,
     l.LAST_UPDATED_DTTM,
@@ -102,6 +106,8 @@ GROUP BY
     l.REF_FIELD_3,
     l.tracking_nbr,
     o.D_COUNTRY_CODE,
+    l.FIRST_ZONE,
+    l.LAST_ZONE,
     o.CREATED_DTTM
 
 ORDER BY
