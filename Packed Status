@@ -1,114 +1,189 @@
-SELECT 
-    TO_CHAR(o.CREATED_DTTM, 'YY-MM-DD') AS CREATED_DATE,
+WITH 
+lpn_qty AS (SELECT
+    l.tc_order_id,
+    SUM(l.total_lpn_qty) AS total_lpn_qty_sum
+  FROM wm.lpn l
+  GROUP BY l.tc_order_id),
+item_names_agg AS (SELECT
     o.tc_order_id,
-    l.tc_lpn_id,
+    LISTAGG(DISTINCT oi.item_name, ', ') 
+      WITHIN GROUP (ORDER BY oi.item_name) AS item_names
+  FROM wm.orders o
+  JOIN wm.order_line_item oi
+    ON o.order_id = oi.order_id
+  GROUP BY o.tc_order_id),
+alloc_agg AS (SELECT o.tc_order_id,
+    SUM(CASE WHEN wmi.allocatable = 'Y' 
+             AND oi.invn_type = wmi.inventory_type
+        THEN wmi.on_hand_qty - wmi.wm_allocated_qty
+        ELSE 0 END) AS allocatable_qty_sum
+  FROM wm.orders o
+  JOIN wm.order_line_item oi
+    ON o.order_id = oi.order_id
+  LEFT JOIN wm.wm_inventory wmi
+    ON oi.item_id = wmi.item_id
+  GROUP BY o.tc_order_id),
+psi_agg AS (SELECT
+    psi.tc_order_id,
+    LISTAGG(DISTINCT icbo.item_name, ', ') 
+      WITHIN GROUP (ORDER BY icbo.item_name) AS short_items,
+    COUNT(DISTINCT psi.item_id) AS psi_count
+  FROM wm.picking_short_item psi
+  JOIN wm.item_cbo icbo
+    ON psi.item_id = icbo.item_id
+  GROUP BY psi.tc_order_id),
+cet_agg AS (SELECT
+    cet.tc_lpn_id,
+    MAX(cet.error_message) KEEP (DENSE_RANK FIRST ORDER BY cet.created_dttm DESC) AS latest_error_message
+  FROM wm.c_enroute_tran cet
+  WHERE cet.error_message IS NOT NULL
+  GROUP BY cet.tc_lpn_id),
 
-    CASE 
-        WHEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) > 0
-            THEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' days ago'
-        WHEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) > 0
-            THEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' hours ago'
-        ELSE ROUND(EXTRACT(MINUTE FROM (SYSTIMESTAMP - (l.LAST_UPDATED_DTTM + INTERVAL '3' HOUR)))) || ' minutes ago'
-    END AS LAST_UPDATED,
-
-    oi.INVN_TYPE,
-    CASE l.lpn_facility_status
-        WHEN 10 THEN 'Printed'
-        WHEN 12 THEN 'Released'
-        WHEN 15 THEN 'In packing'
-        WHEN 20 THEN 'Packed'
-        WHEN 30 THEN 'Weighed'
-        WHEN 40 THEN 'Manifested'
-        WHEN 50 THEN 'Loaded on truck'
-        WHEN 89 THEN 'Completed VAS'
-        WHEN 90 THEN 'Shipped'
-        WHEN 99 THEN 'Cancelled'
-        ELSE 'Unknown'
-    END AS lpn_facility_status_desc,
-    oi.ITEM_NAME,
-    l.REF_FIELD_3 AS Putwall,
-    o.D_COUNTRY_CODE,
-
-    -- ✅ New Case for Milton / Mississauga
-    CASE 
+invn_type_agg AS (SELECT
+    o.tc_order_id,
+    LISTAGG(DISTINCT oi.invn_type, ', ') WITHIN GROUP (ORDER BY oi.invn_type) AS invn_type
+  FROM wm.orders o
+  JOIN wm.order_line_item oi
+    ON o.order_id = oi.order_id
+  GROUP BY o.tc_order_id)
+SELECT
+  TO_CHAR(o.created_dttm + INTERVAL '3' HOUR, 'YY-MM-DD') AS order_create_date,
+  o.tc_order_id,
+  l.tc_lpn_id,
+  inv.invn_type AS invn_type,           
+  CASE l.lpn_facility_status
+    WHEN 10 THEN 'Printed'
+    WHEN 12 THEN 'Released'
+    WHEN 15 THEN 'In packing'
+    WHEN 20 THEN 'Packed'
+    WHEN 30 THEN 'Weighed'
+    WHEN 40 THEN 'Manifested'
+    WHEN 50 THEN 'Loaded on truck'
+    WHEN 89 THEN 'Completed VAS'
+    WHEN 90 THEN 'Shipped'
+    WHEN 99 THEN 'Cancelled'
+    ELSE 'Unknown'
+  END AS lpn_facility_status_desc,
+  CASE
+    WHEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.last_updated_dttm + INTERVAL '3' HOUR)))) > 0
+      THEN ROUND(EXTRACT(DAY FROM (SYSTIMESTAMP - (l.last_updated_dttm + INTERVAL '3' HOUR)))) || ' days ago'
+    WHEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.last_updated_dttm + INTERVAL '3' HOUR)))) > 0
+      THEN ROUND(EXTRACT(HOUR FROM (SYSTIMESTAMP - (l.last_updated_dttm + INTERVAL '3' HOUR)))) || ' hours ago'
+    ELSE ROUND(EXTRACT(MINUTE FROM (SYSTIMESTAMP - (l.last_updated_dttm + INTERVAL '3' HOUR)))) || ' minutes ago'
+  END AS last_updated,
+  ina.item_names AS item_names,
+  l.ref_field_3 AS putwall,
+  o.d_country_code,
+    CASE
         WHEN l.FIRST_ZONE = '95' AND l.LAST_ZONE = '95' 
             THEN 'Milton'
-        ELSE 'Mississauga'
-    END AS LOCATION,
-
-    CASE        
-        WHEN l.lpn_facility_status = 20
-             AND l.REF_FIELD_3 IS NOT NULL
-             AND l.tracking_nbr IS NOT NULL
-        THEN 'PACK AT PUTWALL ' || l.REF_FIELD_3
-      
-        WHEN l.lpn_facility_status IN (20, 30)
-             AND l.REF_FIELD_3 IS NOT NULL
-             AND (l.tracking_nbr IS NULL OR l.tracking_nbr = '')
-        THEN COALESCE(
-                 (SELECT cet.ERROR_MESSAGE
-                  FROM wm.c_enroute_tran cet
-                  WHERE cet.TC_LPN_ID = l.tc_lpn_id
-                    AND cet.ERROR_MESSAGE IS NOT NULL
-                  ORDER BY cet.CREATED_DTTM ASC
-                  FETCH FIRST 1 ROW ONLY),
-                 'INVALID OLPN'
-             )
-        
-        WHEN l.lpn_facility_status = 99
-             AND SUM(
-                     CASE 
-                         WHEN wmi.ALLOCATABLE = 'Y' 
-                              AND oi.INVN_TYPE = wmi.INVENTORY_TYPE
-                         THEN wmi.on_hand_qty - wmi.wm_allocated_qty 
-                         ELSE 0 
-                     END
-                 ) > 0
-        THEN 'NEED CHASE WAVE'
-
-        WHEN l.lpn_facility_status = 99
-             AND SUM(
-                     CASE 
-                         WHEN wmi.ALLOCATABLE = 'Y' 
-                              AND oi.INVN_TYPE = wmi.INVENTORY_TYPE
-                         THEN wmi.on_hand_qty - wmi.wm_allocated_qty 
-                         ELSE 0 
-                     END
-                 ) <= 0
-        THEN 'NEED CHASE CLEANUP'
-
+        WHEN l.FIRST_ZONE = '95' 
+             AND l.LAST_ZONE IN ('11','13','21','23','31','33') 
+             AND (CASE l.lpn_facility_status WHEN 99 THEN 'Cancelled' ELSE 'Other' END) = 'Cancelled'
+            THEN 'MIL and MISS'
+        WHEN l.FIRST_ZONE = '95' 
+             AND l.LAST_ZONE IN ('11','13','21','23','31','33') 
+             AND (CASE l.lpn_facility_status WHEN 99 THEN 'Cancelled' ELSE 'Other' END) <> 'Cancelled'
+            THEN 'Mississauga'
+        WHEN l.FIRST_ZONE IN ('11','13','21','23','31','33')
+             AND l.LAST_ZONE = '95'
+             AND (CASE l.lpn_facility_status WHEN 99 THEN 'Cancelled' ELSE 'Other' END) <> 'Cancelled'
+            THEN 'Mississauga'
+        WHEN l.FIRST_ZONE IN ('11','13','21','23','31','33') 
+             AND l.LAST_ZONE IN ('11','13','21','23','31','33') 
+            THEN 'Mississauga'
+        WHEN l.FIRST_ZONE = '41' 
+             AND l.LAST_ZONE IN ('41','95') 
+            THEN 'FTW'
         ELSE NULL
-    END AS FLAG
-
+    END AS Facility,
+  CASE
+    WHEN l.lpn_facility_status = 30
+         AND (l.tracking_nbr IS NULL OR l.tracking_nbr = '')
+    THEN COALESCE(cet.latest_error_message, '') ||
+         CASE 
+           WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                AND COALESCE(psi.psi_count,0) > 0
+           THEN ' | Short Item: ' || psi.short_items
+           ELSE '' 
+         END
+    WHEN l.lpn_facility_status = 20
+         AND l.ref_field_3 IS NOT NULL
+         AND l.tracking_nbr IS NOT NULL
+    THEN 'PACK AT PUTWALL ' || l.ref_field_3 ||
+         CASE WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                   AND COALESCE(psi.psi_count,0) > 0
+              THEN ' | Short Item: ' || psi.short_items
+              ELSE '' END
+    WHEN l.lpn_facility_status IN (20, 30)
+         AND l.ref_field_3 IS NOT NULL
+         AND (l.tracking_nbr IS NULL OR l.tracking_nbr = '')
+    THEN COALESCE(cet.latest_error_message, 'INVALID OLPN') ||
+         CASE WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                   AND COALESCE(psi.psi_count,0) > 0
+              THEN ' | Short Item: ' || psi.short_items
+              ELSE '' END
+    WHEN l.lpn_facility_status = 20
+         AND l.first_zone = '41'
+         AND l.last_zone IN ('41','95')
+    THEN 'Pack lpn ' || l.tc_reference_lpn_id ||
+         CASE WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                   AND COALESCE(psi.psi_count,0) > 0
+              THEN ' | Short Item: ' || psi.short_items
+              ELSE '' END
+    WHEN l.lpn_facility_status = 99 AND aa.allocatable_qty_sum > 0
+    THEN 'NEED CHASE WAVE' ||
+         CASE WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                   AND COALESCE(psi.psi_count,0) > 0
+              THEN ' | Short Item: ' || psi.short_items
+              ELSE '' END
+    WHEN l.lpn_facility_status = 99 AND aa.allocatable_qty_sum <= 0
+    THEN 'NEED CHASE CLEANUP' ||
+         CASE WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+                   AND COALESCE(psi.psi_count,0) > 0
+              THEN ' | Short Item: ' || psi.short_items
+              ELSE '' END
+    WHEN (CASE l.lpn_facility_status 
+             WHEN 30 THEN 'Weighed'
+             WHEN 50 THEN 'Loaded on truck'
+             ELSE NULL END) IN ('Weighed','Loaded on truck')
+         AND (CASE 
+             WHEN l.lpn_facility_status = 30 THEN 'Weighed'
+             WHEN l.lpn_facility_status = 50 THEN 'Loaded on truck'
+             ELSE NULL END) IS NOT NULL
+         AND (lq.total_lpn_qty_sum = o.total_nbr_of_units 
+           OR COALESCE(psi.psi_count,0) = 0)
+    THEN 'investigate other part of the order, no action required for this olpn'
+    WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+         AND COALESCE(psi.psi_count,0) = 0
+    THEN 'DO QTY MISMATCH'
+    WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+         AND COALESCE(psi.psi_count,0) > 0
+         AND aa.allocatable_qty_sum <= 0
+    THEN 'Invoice the order when Shipment is closed | Short Item: ' || psi.short_items
+    WHEN lq.total_lpn_qty_sum != o.total_nbr_of_units
+         AND COALESCE(psi.psi_count,0) > 0
+         AND aa.allocatable_qty_sum > 0
+    THEN 'NEED CHASE WAVE | Short Item: ' || psi.short_items
+    ELSE NULL
+  END AS status
 FROM wm.orders o
-JOIN wm.ORDER_LINE_ITEM oi 
-    ON o.ORDER_ID = oi.ORDER_ID
-JOIN wm.LPN l 
-    ON o.tc_order_id = l.tc_order_id
-LEFT JOIN wm.wm_inventory wmi 
-    ON oi.item_id = wmi.item_id
-
-WHERE o.DO_STATUS = '150'
+JOIN wm.lpn l
+  ON o.tc_order_id = l.tc_order_id
+LEFT JOIN psi_agg psi
+  ON o.tc_order_id = psi.tc_order_id
+LEFT JOIN cet_agg cet
+  ON l.tc_lpn_id = cet.tc_lpn_id
+LEFT JOIN invn_type_agg inv
+  ON o.tc_order_id = inv.tc_order_id 
+JOIN lpn_qty      lq
+  ON o.tc_order_id = lq.tc_order_id
+JOIN item_names_agg ina
+  ON o.tc_order_id = ina.tc_order_id
+JOIN alloc_agg    aa
+  ON o.tc_order_id = aa.tc_order_id
+WHERE o.do_status = '150'
   AND o.order_type = 'ECOMM'
-  AND l.LPN_FACILITY_STATUS in ('20','99')
-  AND l.tc_reference_lpn_id IS NULL
-  --and l.FIRST_ZONE = '95'
-  --and l.LAST_ZONE = '95'
+--AND l.last_zone <> '41'
+ORDER BY o.created_dttm;
 
-GROUP BY 
-    o.CREATED_DTTM,
-    o.tc_order_id,
-    l.tc_lpn_id,
-    l.LAST_UPDATED_DTTM,
-    l.lpn_facility_status,
-    oi.ITEM_NAME,
-    oi.INVN_TYPE,
-    l.REF_FIELD_3,
-    l.tracking_nbr,
-    o.D_COUNTRY_CODE,
-    l.FIRST_ZONE,
-    l.LAST_ZONE,
-    o.CREATED_DTTM
-
-ORDER BY
-    o.CREATED_DTTM;
